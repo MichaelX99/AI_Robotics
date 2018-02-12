@@ -6,6 +6,7 @@ import shutil
 import numpy as np
 import sys
 from contextlib import contextmanager
+import math as m
 
 
 michaels_code = "PKPMWTlhvllf"
@@ -13,11 +14,7 @@ michaels_code = "PKPMWTlhvllf"
 class R12_Controller:
     def __init__(self, passcode=None):
         # Make sure a passcore was provided
-        try:
-            assert passcode != None
-        except AssertionError, e:
-            print("Please enter passcode into constructor to use the R12 arm")
-            raise SystemExit
+        assert(passcode != None), "Please enter passcode into constructor to use the R12 arm"
 
         # Create the directories to store the images
         self.cwd = os.getcwd()
@@ -51,6 +48,14 @@ class R12_Controller:
 
         # Potentially remove any images from a previous session
         self.send_command( self.make_Image_command(-1) )
+
+        # Measurements for the robot
+        self.base_to_waist = 303 - 223
+        self.waist_to_shoulder = 223
+        self.shoulder_to_elbow = 250
+        self.elbow_to_wrist = 500 - 250
+        self.wrist_to_hand = 532 - 500
+
 
     # taken from https://stackoverflow.com/questions/6735917/redirecting-stdout-to-nothing-in-python
     @contextmanager
@@ -90,22 +95,36 @@ class R12_Controller:
         return output
 
     def parse_output(self, output):
-        pass
+        assert("0: You are not allowed at this time." not in output), "This is not a correct time slot"
 
     def send_command(self, command):
         # Send the GET request to the server
         output = urllib2.urlopen("http://debatedecide.fit.edu/robot.php?o=369&m=Y&p=" + self.passcode + "&c=" + command).read()
 
-        print(output)
-
         # Perform error checking on the returned output
         self.parse_output(output)
 
     def FK(self, hand, wrist, elbow, shoulder, waist):
-        pass
+        y = m.sqrt(1/m.tan(waist)**2) * ((self.shoulder_to_elbow * m.sin(shoulder)) + (self.elbow_to_wrist * m.sin(shoulder+elbow)))
+        x = m.tan(waist) * y
+        z = self.waist_to_shoulder + (self.shoulder_to_elbow * m.cos(shoulder)) + (self.elbow_to_wrist * m.cos(shoulder+elbow))
+
+        # TODO Change
+        w = 0.0
+        h = 0.0
+
+        return h, w, x, y, z
 
     def IK(self, hand, wrist, x, y, z):
-        pass
+        elbow = m.acos((x**2 + y**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2) / (2 * self.shoulder_to_elbow * self.elbow_to_wrist))
+        shoulder = 0.5 * (m.acos((x**2 + y**2 + (z - self.waist_to_shoulder)**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2) / (2 * self.shoulder_to_elbow * self.elbow_to_wrist)) - elbow)
+        waist = m.atan2(x,y)
+
+        # TODO Change
+        w = 0.0
+        h = 0.0
+
+        return h, w, elbow, shoulder, waist
 
     def retrieve_image(self, side):
         # Capture the image
@@ -142,7 +161,3 @@ class R12_Controller:
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
-
-    controller.retrieve_image("top")
-    controller.retrieve_image("right")
-    controller.retrieve_image("left")
