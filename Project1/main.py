@@ -1,41 +1,63 @@
 import urllib2
+import wget
 
-def make_WS_command(hand, wrist, x, y, z):
-    space = "%20"
-    output = "HOME" + space
-    output += hand + space
-    output += wrist + space
-    output += x + space
-    output += y + space
-    output += z + space
-    output += "TMOVETO"
+michaels_code = "PKPMWTlhvllf"
 
-    return output
+class R12_Controller:
+    def __init__(self, passcode):
+        self.space =  "%20"
+        self.output = "HOME" + self.space
 
-def make_CS_command(hand, wrist, elbow, shoulder, waist):
-    space = "%20"
-    output = "HOME" + space
-    output += hand + space
-    output += wrist + space
-    output += elbow + space
-    output += shoulder + space
-    output += waist + space
-    output += "AJMA"
+        self.passcode = passcode
 
-    return output
+        self.num_count = 0
 
-def parse_output(output):
-    pass
+        self.send_command( self.make_Image_command(-1) )
 
-def send_command(command):
-    # Send the GET request to the server
-    output = urllib2.urlopen("http://debatedecide.fit.edu/robot.php?o=369&m=Y&p=PKPMWTlhvllf&c="+command).read()
+    def make_WS_command(self, hand, wrist, x, y, z):
+        output = self.output
+        output += hand + self.space
+        output += wrist + self.space
+        output += x + self.space
+        output += y + self.space
+        output += z + self.space
+        output += "TMOVETO"
 
-    # Perform error checking on the returned output
-    parse_output(output)
+        return output
 
-def FK(hand, wrist, elbow, shoulder, waist):
-    pass
+    def make_CS_command(self, hand, wrist, elbow, shoulder, waist):
+        output = self.output
+        output += hand + self.space
+        output += wrist + self.space
+        output += elbow + self.space
+        output += shoulder + self.space
+        output += waist + self.space
+        output += "AJMA"
 
-def IK(hand, wrist, x, y, z):
-    pass
+        return output
+
+    def make_Image_command(self, count):
+        output = str(count) + self.space + "CAPTURE"
+
+        return output
+
+    def parse_output(self, output):
+        pass
+
+    def send_command(self, command):
+        # Send the GET request to the server
+        output = urllib2.urlopen("http://debatedecide.fit.edu/robot.php?o=369&m=Y&p=" + self.passcode + "&c=" + command).read()
+
+        print(output)
+
+        # Perform error checking on the returned output
+        self.parse_output(output)
+
+    def FK(self, hand, wrist, elbow, shoulder, waist):
+        pass
+
+    def IK(self, hand, wrist, x, y, z):
+        pass
+
+if __name__ == "__main__":
+    controller = R12_Controller(michaels_code)
