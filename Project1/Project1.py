@@ -164,7 +164,8 @@ class R12_Controller:
         z3 = (self.wrist_to_hand + self.hand_length) * m.cos(shoulder+elbow+wrist)
         z = z1 + z2 + z3
 
-        w = m.pi/2 - elbow - shoulder - waist
+        w = shoulder + elbow - wrist
+        #w = m.pi/2 - shoulder - elbow - wrist
         h = -waist
 
         return h, w, x, y, z
@@ -270,20 +271,18 @@ if __name__ == "__main__":
 
 
     hand = 0.0
-    wrist = 0#-m.pi/2
+    wrist = -m.pi/4
     x = -9.93/100
     y = -43.01/100
     z = .16#-16.06/100
 
     print("------------------------")
     print("Input")
-    #print("wrist = " + str(wrist))
+    print("wrist = " + str(wrist))
     print("x = " + str(x))
     print("y = " + str(y))
     print("z = " + str(z))
 
-
-    #hand0, wrist0, elbow0, shoulder0, waist0 = controller.IK(h0, w0, x0, y0, z0)
     output = controller.IK(hand, wrist, x, y, z)
 
     if output is not None:
@@ -299,7 +298,7 @@ if __name__ == "__main__":
 
         print("-----------------------")
         print("FK")
-        #print("W = " + str(w0))
+        print("W = " + str(w0))
         print("X = " + str(x0))
         print("Y = " + str(y0))
         print("Z = " + str(z0))
