@@ -41,21 +41,64 @@ class R12_Controller:
         # Image count
         self.num_count = 1
 
+        # Zero approximation
+        self.zero = 1e-31
+
         # Image arrays
         self.top_images = []
         self.right_images = []
         self.left_images = []
 
         # Potentially remove any images from a previous session
-        self.send_command( self.make_Image_command(-1) )
+        #self.send_command( self.make_Image_command(-1) )
 
         # Measurements for the robot
-        self.base_to_waist = 303 - 223
-        self.waist_to_shoulder = 223
-        self.shoulder_to_elbow = 250
-        self.elbow_to_wrist = 500 - 250
-        self.wrist_to_hand = 532 - 500
+        self.base_to_waist = (303. - 223.)/1000.
+        self.waist_to_shoulder = 223./1000.
+        self.shoulder_to_elbow = 250./1000.
+        self.elbow_to_wrist = (500. - 250.)/1000.
+        self.wrist_to_hand = (532. - 500.)/1000.
+        self.hand_length = 271./1000.
 
+        # Measurements for the object
+        self.obj_h = 700
+        self.obj_w = 700
+        self.obj_l = 1100
+
+        self.obj_x0 = -4500
+        self.obj_y0 = 0
+        self.obj_z0 = 0
+
+        # Offset for the end effector
+        self.distance = 300/100
+
+        # Determine the paths that the end effector needs to take
+        self.top_path = []
+        self.front_path = []
+        self.determine_paths()
+
+    def determine_paths(self):
+        # Front
+        for i in range(0, self.obj_h, 10):
+            for j in range(0, self.obj_l, 10):
+                x = 0
+                y = 0
+                z = 0
+                hand = 0
+                wrist = 0
+                path = [hand, wrist, x, y, z]
+                self.front_path.append(path)
+
+        # Top
+        for i in range(0, self.obj_h, 10):
+            for j in range(0, self.obj_l, 10):
+                x = 0
+                y = 0
+                z = 0
+                hand = 0
+                wrist = 0
+                path = [hand, wrist, x, y, z]
+                self.top_path.append(path)
 
     # taken from https://stackoverflow.com/questions/6735917/redirecting-stdout-to-nothing-in-python
     @contextmanager
@@ -105,26 +148,89 @@ class R12_Controller:
         self.parse_output(output)
 
     def FK(self, hand, wrist, elbow, shoulder, waist):
-        y = m.sqrt(1/m.tan(waist)**2) * ((self.shoulder_to_elbow * m.sin(shoulder)) + (self.elbow_to_wrist * m.sin(shoulder+elbow)))
-        x = m.tan(waist) * y
-        z = self.waist_to_shoulder + (self.shoulder_to_elbow * m.cos(shoulder)) + (self.elbow_to_wrist * m.cos(shoulder+elbow))
+        if waist == 0.0: waist = self.zero
 
-        # TODO Change
-        w = 0.0
-        h = 0.0
+        y0 = 1 / m.sqrt(1 + m.tan(waist)**2)
+        y1 = self.shoulder_to_elbow * m.sin(shoulder)
+        y2 = self.elbow_to_wrist * m.sin(shoulder+elbow)
+        y3 = (self.wrist_to_hand + self.hand_length) * m.sin(shoulder+elbow+wrist)
+        y = y0 * (y1 + y2 + y3)
+
+        x = m.tan(waist) * y
+
+        z0 = self.waist_to_shoulder
+        z1 = self.shoulder_to_elbow * m.cos(shoulder)
+        z2 = self.elbow_to_wrist * m.cos(shoulder+elbow)
+        z3 = (self.wrist_to_hand + self.hand_length) * m.cos(shoulder+elbow+wrist)
+        z = z1 + z2 + z3
+
+        w = m.pi/2 - elbow - shoulder - waist
+        h = -waist
 
         return h, w, x, y, z
 
     def IK(self, hand, wrist, x, y, z):
-        elbow = m.acos((x**2 + y**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2) / (2 * self.shoulder_to_elbow * self.elbow_to_wrist))
-        shoulder = 0.5 * (m.acos((x**2 + y**2 + (z - self.waist_to_shoulder)**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2) / (2 * self.shoulder_to_elbow * self.elbow_to_wrist)) - elbow)
+        if y == 0: y = self.zero
+
         waist = m.atan2(x,y)
 
-        # TODO Change
-        w = 0.0
-        h = 0.0
+        xd = x - ((self.wrist_to_hand + self.hand_length) * m.cos(wrist) * m.sin(waist))
+        yd = y - ((self.wrist_to_hand + self.hand_length) * m.cos(wrist) * m.cos(waist))
+        zd = z + ((self.wrist_to_hand + self.hand_length) * m.sin(wrist))
 
-        return h, w, elbow, shoulder, waist
+        l1 = m.sqrt(xd**2 + yd**2 + (zd - self.waist_to_shoulder)**2)
+        l2 = m.sqrt(xd**2 + yd**2 + zd**2)
+        l3 = m.sqrt(x**2 + y**2 + z**2)
+
+        e1 = l1**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2
+        e2 = 2 * self.shoulder_to_elbow * self.elbow_to_wrist
+        check = e1 / e2
+        if m.fabs(check) <= 1:
+            elbow = m.acos(check)
+        else:
+            return None
+
+        g1_1 = self.shoulder_to_elbow**2 + l1**2 - self.elbow_to_wrist**2
+        g1_2 = 2 * self.shoulder_to_elbow * l1
+        check = g1_1 / g1_2
+        if m.fabs(check) <= 1:
+            g1 = m.acos(g1_1 / g1_2)
+        else:
+            return None
+
+        g2_1 = self.waist_to_shoulder**2 + l1**2 - l2**2
+        g2_2 = 2 * self.waist_to_shoulder * l1
+        check = g2_1 / g2_2
+        if m.fabs(check) < 1:
+            g2 = m.acos(g2_1 / g2_2)
+        else:
+            return None
+
+        shoulder = m.pi - g1 - g2
+
+        g3 = m.pi - g1 - (m.pi - elbow)
+
+        g4_1 = l1**2 + l2**2 - self.waist_to_shoulder**2
+        g4_2 = 2 * l1 * l2
+        check = g4_1 / g4_2
+        if m.fabs(check) < 1:
+            g4 = m.acos(g4_1 / g4_2)
+        else:
+            return None
+
+        g5_1 = l2**2 + (self.wrist_to_hand + self.hand_length)**2 - l3**2
+        g5_2 = 2 * l2 * (self.wrist_to_hand + self.hand_length)
+        check = g5_1 / g5_2
+        if m.fabs(check) < 1:
+            g5 = m.acos(g5_1 / g5_2)
+        else:
+            return None
+
+        w = m.pi - g3 - g4 - g5
+
+        h = -waist
+
+        return [h, w, elbow, shoulder, waist]
 
     def retrieve_image(self, side):
         # Capture the image
@@ -161,3 +267,39 @@ class R12_Controller:
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
+
+
+    hand = 0.0
+    wrist = 0#-m.pi/2
+    x = -9.93/100
+    y = -43.01/100
+    z = .16#-16.06/100
+
+    print("------------------------")
+    print("Input")
+    #print("wrist = " + str(wrist))
+    print("x = " + str(x))
+    print("y = " + str(y))
+    print("z = " + str(z))
+
+
+    #hand0, wrist0, elbow0, shoulder0, waist0 = controller.IK(h0, w0, x0, y0, z0)
+    output = controller.IK(hand, wrist, x, y, z)
+
+    if output is not None:
+        print("-----------------------")
+        print("IK")
+        print("Wrist = " + str(output[1]))
+        print("Elbow = " + str(output[2]))
+        print("Shoulder = " + str(output[3]))
+        print("Waist = " + str(output[4]))
+
+
+        h0, w0, x0, y0, z0 = controller.FK(output[0], output[1], output[2], output[3], output[4])
+
+        print("-----------------------")
+        print("FK")
+        #print("W = " + str(w0))
+        print("X = " + str(x0))
+        print("Y = " + str(y0))
+        print("Z = " + str(z0))
