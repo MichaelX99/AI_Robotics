@@ -253,7 +253,6 @@ class R12_Controller:
         theta = m.pi - (g3 + g4 + g5)
 
         h = -waist
-        print(theta)
 
         return [h, theta, elbow, shoulder, waist]
 
@@ -322,7 +321,7 @@ if __name__ == "__main__":
 
 
     hand = 0.0
-    wrist = .5
+    wrist = m.pi/2
 
     p1 = [-4650., -50., -150.]
     p2 = [-993., -4301., -1606.]
