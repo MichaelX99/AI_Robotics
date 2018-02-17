@@ -1,5 +1,5 @@
 import urllib2
-import wget
+#import wget
 import cv2
 import os
 import shutil
@@ -33,7 +33,7 @@ class R12_Controller:
         self.space =  "%20"
 
         # Command starting point
-        self.output = "HOME" + self.space
+        self.output = ""#"HOME" + self.space
 
         # Passcode to use robot, comes as part of the constructor
         self.passcode = passcode
@@ -61,28 +61,35 @@ class R12_Controller:
         self.hand_length = 271. * 100# / 1000.
 
         # Measurements for the object
-        self.x1 = -1000
-        self.y1 = -50
-        self.x2 = -4650
+        self.x2 = -1000
         self.y2 = -4000
+        self.x1 = -4600
+        self.y1 = -104
 
         # Determine the paths that the end effector needs to take
         self.top_path = []
         self.determine_paths()
 
+        for path in self.top_path:
+            print(path)
+
     def determine_paths(self):
         slope = (self.y2 - self.y1) / (self.x2 - self.x1)
-        b = self.y2 - (slope * self.x2)
+        b = self.y1 - (slope * self.x1)
 
-        by = 100
+        by = 200
+
+        r = int(m.fabs(self.x1 - self.x2))
+
+        #print(r)
 
         # Top
-        for i in range(self.x2 - self.x1, by):
+        for i in range(0, r+by, by):
             x = self.x1 + i
             y = (slope * x) + b
-            z = 0
+            z = -150
             hand = 0
-            wrist = m.pi/2
+            wrist = 0#m.pi/2
             path = [hand, wrist, x, y, z]
             self.top_path.append(path)
 
@@ -98,22 +105,22 @@ class R12_Controller:
 
     def make_WS_command(self, hand, wrist, x, y, z):
         output = self.output
-        output += hand + self.space
-        output += wrist + self.space
-        output += x + self.space
-        output += y + self.space
-        output += z + self.space
+        output = output + str(hand) + self.space
+        output = output + str(wrist) + self.space
+        output = output + str(x) + self.space
+        output = output + str(y) + self.space
+        output = output + str(z) + self.space
         output += "TMOVETO"
 
         return output
 
     def make_CS_command(self, hand, wrist, elbow, shoulder, waist):
         output = self.output
-        output += hand + self.space
-        output += wrist + self.space
-        output += elbow + self.space
-        output += shoulder + self.space
-        output += waist + self.space
+        output = output + str(hand) + self.space
+        output = output + str(wrist) + self.space
+        output = output + str(elbow) + self.space
+        output = output + str(shoulder) + self.space
+        output = output + str(waist) + self.space
         output += "AJMA"
 
         return output
@@ -273,7 +280,8 @@ class R12_Controller:
 
         # Download the file
         with self.silence_stdout():
-            wget.download(url, out=output)
+            pass
+            #wget.download(url, out=output)
 
         self.num_count += 1
         # Open the image
@@ -290,7 +298,7 @@ class R12_Controller:
         else:
             os.remove(output)
 
-    def paul_ik(self, hand, wrist, x, y, z):
+    def paul_ik(self, wrist, x, y, z):
         arbit_l = 113
 
         wrist *= m.pi / 180
@@ -308,24 +316,42 @@ class R12_Controller:
 
         wrist_out = wrist - (shoulder + elbow)
 
-        #waist = m.atan2(y, x)
         waist = m.atan2(x,y)
 
-        shoulder = m.pi - shoulder
-        elbow = m.pi - elbow
-        wrist = m.pi - wrist
+        hand = -waist
 
-        return waist, shoulder, elbow, wrist_out
+        hand = int(100 * m.degrees(hand))
+        waist = int(100 * m.degrees(waist))
+        shoulder = int(100 * m.degrees(shoulder))
+        elbow = int(100 * m.degrees(elbow))
+        wrist_out = int(100 * (m.degrees(wrist_out) + 180))
+
+        return hand, waist, shoulder, elbow, wrist_out
+
+    def run(self):
+        for path in self.top_path:
+            print('here')
+            wrist = path[1]
+            x = path[2]
+            y = path[3]
+            z = path[4]
+
+            hand, waist, shoulder, elbow, wrist_out = self.paul_ik(wrist, x, y, z)
+
+            command = self.make_CS_command(hand, wrist_out, elbow, shoulder, waist)
+
+            self.send_command(command)
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
 
+    controller.run()
 
     hand = 0.0
-    wrist = .5
+    wrist = 0.0
 
-    p1 = [-4650., -50., -150.]
-    p2 = [-993., -4301., -1606.]
+    p1 = [-993., -4301., -1606.]
+    p2 = [-4650., -50., -150.]
     p3 = [-3000., -2000., -150.]
     p4 = [-1000., -4000., -150.]
 
@@ -334,7 +360,6 @@ if __name__ == "__main__":
     y = p[1]
     z = p[2]
 
-
     print("------------------------")
     print("Input")
     print("wrist = " + str(wrist))
@@ -342,6 +367,7 @@ if __name__ == "__main__":
     print("y = " + str(y))
     print("z = " + str(z))
 
+    """
     IK_output = controller.IK(hand, wrist, x, y, z)
 
     if IK_output is not None:
@@ -364,19 +390,15 @@ if __name__ == "__main__":
         print("No IK")
     """
 
-    x = -4650
-    y = -50
-    z = -150
-    phi = 0
-    waist, shoulder, elbow, wrist = controller.paul_ik(0, phi, x, y, z)
+    """
+    #phi = 0
+    hand, waist, shoulder, elbow, wrist = controller.paul_ik(wrist, x, y, z)
 
-    FK_output = controller.FK(-waist, wrist, elbow, shoulder, waist)
-
-    if FK_output is not None:
-        print("-----------------------")
-        print("FK")
-        print("W = " + str(FK_output[1]))
-        print("X = " + str(FK_output[2]))
-        print("Y = " + str(FK_output[3]))
-        print("Z = " + str(FK_output[4]))
+    print("-----------------------")
+    print("IK")
+    print("Hand = " + str(hand))
+    print("Waist = " + str(waist))
+    print("Shoulder = " + str(shoulder))
+    print("Elbow = " + str(elbow))
+    print("Wrist = " + str(wrist))
     """
