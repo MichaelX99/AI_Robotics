@@ -61,10 +61,10 @@ class R12_Controller:
         self.hand_length = 271. * 100# / 1000.
 
         # Measurements for the object
-        self.x2 = -1000
-        self.y2 = -4000
-        self.x1 = -4600
-        self.y1 = -104
+        self.x2 = -1000.
+        self.y2 = -4000.
+        self.x1 = -4600.
+        self.y1 = -104.
 
         # Determine the paths that the end effector needs to take
         self.top_path = []
@@ -75,6 +75,7 @@ class R12_Controller:
 
     def determine_paths(self):
         slope = (self.y2 - self.y1) / (self.x2 - self.x1)
+
         b = self.y1 - (slope * self.x1)
 
         by = 200
