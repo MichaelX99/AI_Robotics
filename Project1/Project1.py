@@ -71,9 +71,10 @@ class R12_Controller:
         self.CS_path = []
         self.WS_path = []
         self.extrude_object()
-        self.determine_paths()
+        self.determine_AJMA_path()
+        self.determine_TMOVETO_path()
 
-        for path in self.top_path:
+        for path in self.WS_path:
             print(path)
 
     def extrude_object(self):
@@ -94,7 +95,7 @@ class R12_Controller:
             path = [hand, wrist, x, y, z]
             self.top_path.append(path)
 
-    def determine_paths(self):
+    def determine_AJMA_path(self):
         for path in self.top_path:
             wrist = 0.0
             x = float(path[2])
@@ -108,16 +109,45 @@ class R12_Controller:
             elbow = int(elbow)
             shoulder = int(shoulder)
             waist = int(waist)
-            x = int(x)
-            y = int(y)
-            z = int(z)
-
 
             cs_path = [hand, wrist_out, elbow, shoulder, waist]
-            ws_path = [hand, wrist_out, x, y, z]
 
             self.CS_path.append(cs_path)
-            self.WS_path.append(ws_path)
+
+    def determine_TMOVETO_path(self):
+        x1 = -854.
+        y1 = -3418.
+        z1 = -1285.
+
+        x2 = -2346.
+        z2 = -1360.
+
+        x3 = -3817.
+        y3 = -86.
+        z3 = -1295.
+
+        slope = (y3 - y1) / (x3 - x1)
+        b = y1 - (slope * x1)
+
+        by = 200
+
+        r = int(m.fabs(x1 - x3))
+
+        xs = np.array([x1, x2, x3])
+        zs = np.array([z1, z2, z3])
+
+        # Z IS NOT STRAIGHT IN TMOVETO IT ARCS.  however it is a larger arc than a 4th degree and I do not care enough to get more points to make it more exact
+        coefs = np.polyfit(xs, zs, 4)
+
+        # Top
+        for i in range(0, r+by, by):
+            x = int(x1 - i)
+            y = int((slope * x) + b)
+            z = int((coefs[0] * x**4) + (coefs[1] * x**3) + (coefs[2] * x**2) + (coefs[3] * x) + coefs[4])
+            hand = int(m.degrees(-m.atan2(-x, -y)) * 100.)
+            wrist = -9000.
+            path = [hand, wrist, x, y, z]
+            self.WS_path.append(path)
 
     # taken from https://stackoverflow.com/questions/6735917/redirecting-stdout-to-nothing-in-python
     @contextmanager
@@ -165,29 +195,6 @@ class R12_Controller:
 
         # Perform error checking on the returned output
         self.parse_output(output)
-
-    def relative_angle(self, alpha, beta, gamma):
-        """
-        num1_1 = m.tan(alpha) / m.sqrt(1 + m.tan(alpha)**2)
-        num1_2 = self.elbow_to_wrist * m.sin(beta + gamma) * m.sin(alpha)
-        num2_1 = 1 / m.sqrt(1 + m.tan(alpha)**2)
-        num2_2 = self.elbow_to_wrist * m.sin(beta + gamma) * m.cos(alpha)
-        num = (num1_1 * num1_2) + (num2_1 * num2_2)
-
-        den = self.elbow_to_wrist**2
-        """
-        num = m.sqrt(self.elbow_to_wrist**2 * m.sin(beta + gamma)**2 * (1 + m.tan(alpha)**2))
-
-        den1 = self.elbow_to_wrist**2 * m.sin(beta + gamma)**2 * m.sqrt(1 + m.tan(alpha)**2)
-        den2 = self.elbow_to_wrist**2 * m.cos(beta + gamma)**2
-        den = den1 + den2
-
-
-        check = num / den
-        if m.fabs(check) < 1:
-            return m.acos(check)
-        else:
-            return None
 
     def FK(self, hand, wrist, elbow, shoulder, waist):
         if waist == 0.0: waist = self.zero
@@ -268,7 +275,6 @@ class R12_Controller:
 
         wrist_out = wrist - (shoulder + elbow)
 
-        #waist = m.atan2(x,y)
         waist = m.atan2(-x,-y)
 
         hand = -waist
@@ -282,7 +288,7 @@ class R12_Controller:
         return hand, waist, shoulder, elbow, wrist_out
 
     def run(self):
-        """
+
         for path in self.CS_path:
             hand = path[0]
             wrist = path[1]
@@ -293,21 +299,18 @@ class R12_Controller:
             command = self.make_CS_command(int(hand), int(wrist), int(elbow), int(shoulder), int(waist))
 
             self.send_command(command)
-        """
-
-        count = 1
+        
 
         for path in self.WS_path:
             hand = path[0]
-            wrist = -9000#path[1]
-            x = path[2] - (count * )
-            y = path[3] # convention has z an y flipped
-            z = path[4] - (count * 100.)
-            count = count + 1
+            wrist = path[1]
+            x = path[2]
+            y = path[3]
+            z = path[4]
 
             command = self.make_WS_command(int(hand), int(wrist), int(x), int(y), int(z))
 
-            self.send_command(command)
+            #self.send_command(command)
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
