@@ -78,7 +78,6 @@ class R12_Controller:
 
     def extrude_object(self):
         slope = (self.y2 - self.y1) / (self.x2 - self.x1)
-
         b = self.y1 - (slope * self.x1)
 
         by = 200
