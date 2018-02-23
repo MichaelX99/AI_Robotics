@@ -1,5 +1,5 @@
 import urllib2
-#import wget
+import wget
 import cv2
 import os
 import shutil
@@ -46,7 +46,7 @@ class R12_Controller:
         self.tmoveto_images = []
 
         # Potentially remove any images from a previous session
-        #self.send_command( self.make_Image_command(-1) )
+        self.send_command( self.make_Image_command(-1) )
 
         # Measurements for the robot
         self.base_to_waist = (303. - 223.) * 100
@@ -230,8 +230,7 @@ class R12_Controller:
 
         # Download the file
         with self.silence_stdout():
-            pass
-            #wget.download(url, out=output)
+            wget.download(url, out=output)
 
         # Open the image
         image = cv2.imread(output)
