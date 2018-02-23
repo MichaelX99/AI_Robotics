@@ -19,15 +19,12 @@ class R12_Controller:
         # Create the directories to store the images
         self.cwd = os.getcwd()
         if not os.path.exists(self.cwd + "/Images/"): os.mkdir(self.cwd + "/Images/")
-        self.top_dir = self.cwd + "/Images/Top/"
-        self.right_dir = self.cwd + "/Images/Right/"
-        self.left_dir = self.cwd + "/Images/Left/"
-        if os.path.exists(self.top_dir): shutil.rmtree(self.top_dir)
-        if os.path.exists(self.right_dir): shutil.rmtree(self.right_dir)
-        if os.path.exists(self.left_dir): shutil.rmtree(self.left_dir)
-        os.mkdir(self.top_dir)
-        os.mkdir(self.right_dir)
-        os.mkdir(self.left_dir)
+        self.ajma_dir = self.cwd + "/Images/AJMA/"
+        self.tmoveto_dir = self.cwd + "/Images/TMOVETO/"
+        if os.path.exists(self.ajma_dir): shutil.rmtree(self.ajma_dir)
+        if os.path.exists(self.tmoveto_dir): shutil.rmtree(self.tmoveto_dir)
+        os.mkdir(self.ajma_dir)
+        os.mkdir(self.tmoveto_dir)
 
         # Space for commands
         self.space =  "%20"
@@ -45,20 +42,19 @@ class R12_Controller:
         self.zero = 1e-31
 
         # Image arrays
-        self.top_images = []
-        self.right_images = []
-        self.left_images = []
+        self.ajma_images = []
+        self.tmoveto_images = []
 
         # Potentially remove any images from a previous session
         #self.send_command( self.make_Image_command(-1) )
 
         # Measurements for the robot
-        self.base_to_waist = (303. - 223.) * 100# / 1000.
-        self.waist_to_shoulder = 223. * 100# / 1000.
-        self.shoulder_to_elbow = 250. * 100# / 1000.
-        self.elbow_to_wrist = (500. - 250.) * 100# / 1000.
-        self.wrist_to_hand = (532. - 500.) * 100# / 1000.
-        self.hand_length = 271. * 100# / 1000.
+        self.base_to_waist = (303. - 223.) * 100
+        self.waist_to_shoulder = 223. * 100
+        self.shoulder_to_elbow = 250. * 100
+        self.elbow_to_wrist = (500. - 250.) * 100
+        self.wrist_to_hand = (532. - 500.) * 100
+        self.hand_length = 271. * 100
 
         # Measurements for the object
         self.x2 = -1000.
@@ -73,9 +69,6 @@ class R12_Controller:
         self.extrude_object()
         self.determine_AJMA_path()
         self.determine_TMOVETO_path()
-
-        for path in self.WS_path:
-            print(path)
 
     def extrude_object(self):
         slope = (self.y2 - self.y1) / (self.x2 - self.x1)
@@ -223,18 +216,16 @@ class R12_Controller:
         else:
             return None
 
-    def retrieve_image(self, side):
+    def retrieve_image(self, directory):
         # Capture the image
         self.send_command( self.make_Image_command(self.num_count) )
 
         # Form the url
         url =  "http://debatedecide.fit.edu/robot/" + str(self.num_count) + ".bmp"
-        if side == "top":
-            output = self.top_dir
-        elif side == "right":
-            output = self.right_dir
-        elif side == "left":
-            output = self.left_dir
+        if directory == "ajma":
+            output = self.ajma_dir
+        elif directory == "tmoveto":
+            output = self.tmoveto_dir
         output += str(self.num_count) + ".bmp"
 
         # Download the file
@@ -242,18 +233,16 @@ class R12_Controller:
             pass
             #wget.download(url, out=output)
 
-        self.num_count += 1
         # Open the image
         image = cv2.imread(output)
 
         # Store the image if it was correctly captured, downloaded, and loaded otherwise delete it
         if type(image) == np.ndarray:
-            if side == "top":
-                self.top_images.append(image)
-            elif side == "right":
-                self.right_images.append(image)
-            elif side == "left":
-                self.left_images.append(image)
+            self.num_count += 1
+            if directory == "ajma":
+                self.ajma_images.append(image)
+            elif directory == "tmoveto":
+                self.tmoveto_images.append(image)
         else:
             os.remove(output)
 
@@ -297,9 +286,10 @@ class R12_Controller:
             waist = path[4]
 
             command = self.make_CS_command(int(hand), int(wrist), int(elbow), int(shoulder), int(waist))
-
             self.send_command(command)
-        
+            self.retrieve_image("ajma")
+
+        self.num_count = 1
 
         for path in self.WS_path:
             hand = path[0]
@@ -309,8 +299,8 @@ class R12_Controller:
             z = path[4]
 
             command = self.make_WS_command(int(hand), int(wrist), int(x), int(y), int(z))
-
-            #self.send_command(command)
+            self.send_command(command)
+            self.retrieve_image("tmoveto")
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
