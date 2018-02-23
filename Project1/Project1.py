@@ -19,21 +19,18 @@ class R12_Controller:
         # Create the directories to store the images
         self.cwd = os.getcwd()
         if not os.path.exists(self.cwd + "/Images/"): os.mkdir(self.cwd + "/Images/")
-        self.top_dir = self.cwd + "/Images/Top/"
-        self.right_dir = self.cwd + "/Images/Right/"
-        self.left_dir = self.cwd + "/Images/Left/"
-        if os.path.exists(self.top_dir): shutil.rmtree(self.top_dir)
-        if os.path.exists(self.right_dir): shutil.rmtree(self.right_dir)
-        if os.path.exists(self.left_dir): shutil.rmtree(self.left_dir)
-        os.mkdir(self.top_dir)
-        os.mkdir(self.right_dir)
-        os.mkdir(self.left_dir)
+        self.ajma_dir = self.cwd + "/Images/AJMA/"
+        self.tmoveto_dir = self.cwd + "/Images/TMOVETO/"
+        if os.path.exists(self.ajma_dir): shutil.rmtree(self.ajma_dir)
+        if os.path.exists(self.tmoveto_dir): shutil.rmtree(self.tmoveto_dir)
+        os.mkdir(self.ajma_dir)
+        os.mkdir(self.tmoveto_dir)
 
         # Space for commands
         self.space =  "%20"
 
         # Command starting point
-        self.output = "HOME" + self.space
+        self.output = ""#"HOME" + self.space
 
         # Passcode to use robot, comes as part of the constructor
         self.passcode = passcode
@@ -45,46 +42,105 @@ class R12_Controller:
         self.zero = 1e-31
 
         # Image arrays
-        self.top_images = []
-        self.right_images = []
-        self.left_images = []
+        self.ajma_images = []
+        self.tmoveto_images = []
 
         # Potentially remove any images from a previous session
-        #self.send_command( self.make_Image_command(-1) )
+        self.send_command( self.make_Image_command(-1) )
 
         # Measurements for the robot
-        self.base_to_waist = (303. - 223.) * 100# / 1000.
-        self.waist_to_shoulder = 223. * 100# / 1000.
-        self.shoulder_to_elbow = 250. * 100# / 1000.
-        self.elbow_to_wrist = (500. - 250.) * 100# / 1000.
-        self.wrist_to_hand = (532. - 500.) * 100# / 1000.
-        self.hand_length = 271. * 100# / 1000.
+        self.base_to_waist = (303. - 223.) * 100
+        self.waist_to_shoulder = 223. * 100
+        self.shoulder_to_elbow = 250. * 100
+        self.elbow_to_wrist = (500. - 250.) * 100
+        self.wrist_to_hand = (532. - 500.) * 100
+        self.hand_length = 271. * 100
 
         # Measurements for the object
-        self.x1 = -1000
-        self.y1 = -50
-        self.x2 = -4650
-        self.y2 = -4000
+        self.x2 = -1000.
+        self.y2 = -4000.
+        self.x1 = -4600.
+        self.y1 = -104.
 
         # Determine the paths that the end effector needs to take
         self.top_path = []
-        self.determine_paths()
+        self.CS_path = []
+        self.WS_path = []
+        self.extrude_object()
+        self.determine_AJMA_path()
+        self.determine_TMOVETO_path()
 
-    def determine_paths(self):
+    def extrude_object(self):
         slope = (self.y2 - self.y1) / (self.x2 - self.x1)
-        b = self.y2 - (slope * self.x2)
+        b = self.y1 - (slope * self.x1)
 
-        by = 100
+        by = 200
+
+        r = int(m.fabs(self.x1 - self.x2))
 
         # Top
-        for i in range(self.x2 - self.x1, by):
-            x = self.x1 + i
-            y = (slope * x) + b
-            z = 0
+        for i in range(0, r+by, by):
+            x = int(self.x1 + i)
+            y = int((slope * x) + b)
+            z = -150
             hand = 0
-            wrist = m.pi/2
+            wrist = 0#m.pi/2
             path = [hand, wrist, x, y, z]
             self.top_path.append(path)
+
+    def determine_AJMA_path(self):
+        for path in self.top_path:
+            wrist = 0.0
+            x = float(path[2])
+            y = float(path[3])
+            z = float(path[4])
+
+            hand, waist, shoulder, elbow, wrist_out = self.paul_ik(float(wrist), float(x), float(y), float(z))
+
+            hand = int(hand)
+            wrist_out = int(wrist_out)
+            elbow = int(elbow)
+            shoulder = int(shoulder)
+            waist = int(waist)
+
+            cs_path = [hand, wrist_out, elbow, shoulder, waist]
+
+            self.CS_path.append(cs_path)
+
+    def determine_TMOVETO_path(self):
+        x1 = -854.
+        y1 = -3418.
+        z1 = -1285.
+
+        x2 = -2346.
+        z2 = -1360.
+
+        x3 = -3817.
+        y3 = -86.
+        z3 = -1295.
+
+        slope = (y3 - y1) / (x3 - x1)
+        b = y1 - (slope * x1)
+
+        by = 200
+
+        r = int(m.fabs(x1 - x3))
+
+        xs = np.array([x1, x2, x3])
+        zs = np.array([z1, z2, z3])
+
+        # Z IS NOT STRAIGHT IN TMOVETO IT ARCS.  however it is a larger arc than a 4th degree and I do not care enough to get more points to make it more exact
+        coefs = np.polyfit(xs, zs, 4)
+
+        # Top
+        for i in range(0, r+by, by):
+            x = int(x1 - i)
+            y = int((slope * x) + b)
+            z = int((coefs[0] * x**4) + (coefs[1] * x**3) + (coefs[2] * x**2) + (coefs[3] * x) + coefs[4])
+            hand = int(m.degrees(-m.atan2(-x, -y)) * 100.)
+            wrist = -9000.
+            path = [hand, wrist, x, y, z]
+            self.WS_path.append(path)
 
     # taken from https://stackoverflow.com/questions/6735917/redirecting-stdout-to-nothing-in-python
     @contextmanager
@@ -98,22 +154,22 @@ class R12_Controller:
 
     def make_WS_command(self, hand, wrist, x, y, z):
         output = self.output
-        output += hand + self.space
-        output += wrist + self.space
-        output += x + self.space
-        output += y + self.space
-        output += z + self.space
+        output = output + str(hand) + self.space
+        output = output + str(wrist) + self.space
+        output = output + str(x) + self.space
+        output = output + str(y) + self.space
+        output = output + str(z) + self.space
         output += "TMOVETO"
 
         return output
 
     def make_CS_command(self, hand, wrist, elbow, shoulder, waist):
         output = self.output
-        output += hand + self.space
-        output += wrist + self.space
-        output += elbow + self.space
-        output += shoulder + self.space
-        output += waist + self.space
+        output = output + str(hand) + self.space
+        output = output + str(wrist) + self.space
+        output = output + str(elbow) + self.space
+        output = output + str(shoulder) + self.space
+        output = output + str(waist) + self.space
         output += "AJMA"
 
         return output
@@ -132,29 +188,6 @@ class R12_Controller:
 
         # Perform error checking on the returned output
         self.parse_output(output)
-
-    def relative_angle(self, alpha, beta, gamma):
-        """
-        num1_1 = m.tan(alpha) / m.sqrt(1 + m.tan(alpha)**2)
-        num1_2 = self.elbow_to_wrist * m.sin(beta + gamma) * m.sin(alpha)
-        num2_1 = 1 / m.sqrt(1 + m.tan(alpha)**2)
-        num2_2 = self.elbow_to_wrist * m.sin(beta + gamma) * m.cos(alpha)
-        num = (num1_1 * num1_2) + (num2_1 * num2_2)
-
-        den = self.elbow_to_wrist**2
-        """
-        num = m.sqrt(self.elbow_to_wrist**2 * m.sin(beta + gamma)**2 * (1 + m.tan(alpha)**2))
-
-        den1 = self.elbow_to_wrist**2 * m.sin(beta + gamma)**2 * m.sqrt(1 + m.tan(alpha)**2)
-        den2 = self.elbow_to_wrist**2 * m.cos(beta + gamma)**2
-        den = den1 + den2
-
-
-        check = num / den
-        if m.fabs(check) < 1:
-            return m.acos(check)
-        else:
-            return None
 
     def FK(self, hand, wrist, elbow, shoulder, waist):
         if waist == 0.0: waist = self.zero
@@ -183,116 +216,39 @@ class R12_Controller:
         else:
             return None
 
-    def IK(self, hand, wrist, x, y, z):
-        if y == 0: y = self.zero
-
-        waist = m.atan2(x,y)
-
-        xd = x - ((self.wrist_to_hand + self.hand_length) * m.cos(wrist) * m.sin(waist))
-        yd = y - ((self.wrist_to_hand + self.hand_length) * m.cos(wrist) * m.cos(waist))
-        zd = z + ((self.wrist_to_hand + self.hand_length) * m.sin(wrist))
-
-        l1 = m.sqrt(xd**2 + yd**2 + (zd - self.waist_to_shoulder)**2)
-        l2 = m.sqrt(xd**2 + yd**2 + zd**2)
-        l3 = m.sqrt(x**2 + y**2 + z**2)
-
-        e1 = l1**2 - self.shoulder_to_elbow**2 - self.elbow_to_wrist**2
-        e2 = 2 * self.shoulder_to_elbow * self.elbow_to_wrist
-        check = e1 / e2
-        if m.fabs(check) <= 1:
-            elbow = m.acos(check)
-        else:
-            print("elbow")
-            print(check)
-            return None
-
-        g1_1 = self.shoulder_to_elbow**2 + l1**2 - self.elbow_to_wrist**2
-        g1_2 = 2 * self.shoulder_to_elbow * l1
-        check = g1_1 / g1_2
-        if m.fabs(check) <= 1:
-            g1 = m.acos(check)
-        else:
-            print("g1")
-            print(check)
-            return None
-
-        g2_1 = self.waist_to_shoulder**2 + l1**2 - l2**2
-        g2_2 = 2 * self.waist_to_shoulder * l1
-        check = g2_1 / g2_2
-        if m.fabs(check) < 1:
-            g2 = m.acos(check)
-        else:
-            print("g2")
-            print(check)
-            return None
-
-        shoulder = m.pi - g1 - g2
-
-        g3 = m.pi - g1 - (m.pi - elbow)
-
-        g4_1 = l1**2 + l2**2 - self.waist_to_shoulder**2
-        g4_2 = 2 * l1 * l2
-        check = g4_1 / g4_2
-        if m.fabs(check) < 1:
-            g4 = m.acos(check)
-        else:
-            print("g4")
-            print(check)
-            return None
-
-        g5_1 = l2**2 + (self.wrist_to_hand + self.hand_length)**2 - l3**2
-        g5_2 = 2 * l2 * (self.wrist_to_hand + self.hand_length)
-        check = g5_1 / g5_2
-        if m.fabs(check) < 1:
-            g5 = m.acos(check)
-        else:
-            print("g5")
-            print(check)
-            return None
-
-        theta = m.pi - (g3 + g4 + g5)
-
-        h = -waist
-
-        return [h, theta, elbow, shoulder, waist]
-
-    def retrieve_image(self, side):
+    def retrieve_image(self, directory):
         # Capture the image
         self.send_command( self.make_Image_command(self.num_count) )
 
         # Form the url
         url =  "http://debatedecide.fit.edu/robot/" + str(self.num_count) + ".bmp"
-        if side == "top":
-            output = self.top_dir
-        elif side == "right":
-            output = self.right_dir
-        elif side == "left":
-            output = self.left_dir
+        if directory == "ajma":
+            output = self.ajma_dir
+        elif directory == "tmoveto":
+            output = self.tmoveto_dir
         output += str(self.num_count) + ".bmp"
 
         # Download the file
         with self.silence_stdout():
             wget.download(url, out=output)
 
-        self.num_count += 1
         # Open the image
         image = cv2.imread(output)
 
         # Store the image if it was correctly captured, downloaded, and loaded otherwise delete it
         if type(image) == np.ndarray:
-            if side == "top":
-                self.top_images.append(image)
-            elif side == "right":
-                self.right_images.append(image)
-            elif side == "left":
-                self.left_images.append(image)
+            self.num_count += 1
+            if directory == "ajma":
+                self.ajma_images.append(image)
+            elif directory == "tmoveto":
+                self.tmoveto_images.append(image)
         else:
             os.remove(output)
 
-    def paul_ik(self, hand, wrist, x, y, z):
-        arbit_l = 113
+    def paul_ik(self, wrist, x, y, z):
+        arbit_l = 113.
 
-        wrist *= m.pi / 180
+        wrist *= m.pi / 180.
 
         l = m.sqrt(x**2 + y**2) / 10.
 
@@ -301,81 +257,51 @@ class R12_Controller:
 
         lam = m.atan2(-xp, -yp)
 
-        shoulder = lam + m.acos((-(xp**2 + yp**2 + 250**2  - 250**2)) / (2 * 250 * m.sqrt(xp**2 + yp**2)))
+        shoulder = lam + m.acos((-(xp**2 + yp**2 + 250.**2  - 250.**2)) / (2. * 250. * m.sqrt(xp**2 + yp**2)))
 
-        elbow = m.atan2((xp - 250 * m.cos(shoulder))/250, (yp - 250 * m.sin(shoulder)) / 250) - shoulder
+        elbow = m.atan2((xp - 250. * m.cos(shoulder))/250., (yp - 250. * m.sin(shoulder)) / 250.) - shoulder
 
         wrist_out = wrist - (shoulder + elbow)
 
-        #waist = m.atan2(y, x)
-        waist = m.atan2(x,y)
+        waist = m.atan2(-x,-y)
 
-        shoulder = m.pi - shoulder
-        elbow = m.pi - elbow
-        wrist = m.pi - wrist
+        hand = -waist
 
-        return waist, shoulder, elbow, wrist_out
+        hand = int(100. * m.degrees(hand))
+        waist = int(100. * m.degrees(waist))
+        shoulder = -int(100. * m.degrees(shoulder))
+        elbow = -int(100. * m.degrees(elbow))
+        wrist_out = -int(100. * (m.degrees(wrist_out) + 180.))
+
+        return hand, waist, shoulder, elbow, wrist_out
+
+    def run(self):
+
+        for path in self.CS_path:
+            hand = path[0]
+            wrist = path[1]
+            elbow = path[2]
+            shoulder = path[3]
+            waist = path[4]
+
+            command = self.make_CS_command(int(hand), int(wrist), int(elbow), int(shoulder), int(waist))
+            self.send_command(command)
+            self.retrieve_image("ajma")
+
+        self.num_count = 1
+
+        for path in self.WS_path:
+            hand = path[0]
+            wrist = path[1]
+            x = path[2]
+            y = path[3]
+            z = path[4]
+
+            command = self.make_WS_command(int(hand), int(wrist), int(x), int(y), int(z))
+            self.send_command(command)
+            self.retrieve_image("tmoveto")
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
 
-
-    hand = 0.0
-    wrist = m.pi/2
-
-    p1 = [-4650., -50., -150.]
-    p2 = [-993., -4301., -1606.]
-    p3 = [-3000., -2000., -150.]
-    p4 = [-1000., -4000., -150.]
-
-    p = p2
-    x = p[0]
-    y = p[1]
-    z = p[2]
-
-
-    print("------------------------")
-    print("Input")
-    print("wrist = " + str(wrist))
-    print("x = " + str(x))
-    print("y = " + str(y))
-    print("z = " + str(z))
-
-    IK_output = controller.IK(hand, wrist, x, y, z)
-
-    if IK_output is not None:
-
-        FK_output = controller.FK(IK_output[0], IK_output[1], IK_output[2], IK_output[3], IK_output[4])
-
-        if FK_output is not None:
-            print("-----------------------")
-            print("FK")
-            print("W = " + str(FK_output[1]))
-            print("X = " + str(FK_output[2]))
-            print("Y = " + str(FK_output[3]))
-            print("Z = " + str(FK_output[4]))
-
-        else:
-            print("-----------------------")
-            print("No FK")
-    else:
-        print("-----------------------")
-        print("No IK")
-    """
-
-    x = -4650
-    y = -50
-    z = -150
-    phi = 0
-    waist, shoulder, elbow, wrist = controller.paul_ik(0, phi, x, y, z)
-
-    FK_output = controller.FK(-waist, wrist, elbow, shoulder, waist)
-
-    if FK_output is not None:
-        print("-----------------------")
-        print("FK")
-        print("W = " + str(FK_output[1]))
-        print("X = " + str(FK_output[2]))
-        print("Y = " + str(FK_output[3]))
-        print("Z = " + str(FK_output[4]))
-    """
+    controller.run()
