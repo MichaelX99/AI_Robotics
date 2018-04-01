@@ -1,8 +1,9 @@
 from naoqi import ALProxy
-IP = "your_robot_ip"
+
+IP = "192.168.1.5"
 PORT = 9559
 # Create a proxy to ALLandMarkDetection
-markProxy = ALproxy("ALLandMarkDetection", IP, PORT)
+markProxy = ALProxy("ALLandMarkDetection", IP, PORT)
 # Subscribe to the ALLandMarkDetection extractor
 period = 500
 markProxy.subscribe("Test_Mark", period, 0.0 )

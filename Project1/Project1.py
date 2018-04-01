@@ -289,7 +289,7 @@ class R12_Controller:
             self.retrieve_image("ajma")
 
         self.num_count = 1
-
+        """
         for path in self.WS_path:
             hand = path[0]
             wrist = path[1]
@@ -300,6 +300,7 @@ class R12_Controller:
             command = self.make_WS_command(int(hand), int(wrist), int(x), int(y), int(z))
             self.send_command(command)
             self.retrieve_image("tmoveto")
+        """
 
 if __name__ == "__main__":
     controller = R12_Controller(michaels_code)
