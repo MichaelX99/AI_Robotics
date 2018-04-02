@@ -1,10 +1,15 @@
 import numpy as np
+from random import *
 
 x0 = []
+N = 20
 
-known = [81,4,64,1,33,24,50,53,74,42,41,94,37,33,50,55,48,73,29,39]
+# These were for my original numbers...
+#known = [81,4,64,1,33,24,50,53,74,42,41,94,37,33,50,55,48,73,29,39]
 
-for p in known:
+for i in range(N):
+    p = randint(0,100)
+    #p = known[i]
     not_p = 100 - p
     temp = [not_p, p]
     x0.append(temp)
