@@ -9,13 +9,13 @@ N = 20
 
 for i in range(N):
     p = randint(0,100)
+    p /= 100.
     #p = known[i]
-    not_p = 100 - p
+    not_p = 1. - p
     temp = [not_p, p]
     x0.append(temp)
 
 x0 = np.asarray(x0)
-
 print(x0)
 print("\n\n\n")
 
@@ -38,3 +38,19 @@ for i in range(len(f1)):
 print(f1)
 print("\n\n\n")
 
+
+new_x1 = []
+while len(new_x1) != N:
+    for i in range(N):
+        particle = f1[i]
+        most_prob_state = np.argmax(particle)
+        w = s0[most_prob_state]
+        p = randint(0,100) / 100.
+        if p < w:
+            new_x1.append(particle)
+        blag = 4
+        if len(new_x1) == N:
+            break
+
+x1 = np.asarray(new_x1)
+print(x1)
