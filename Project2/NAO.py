@@ -7,6 +7,7 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 from scipy import misc
+import numpy as np
 
 class NAO(object):
     def __init__(self, ip, connected=False):
@@ -180,11 +181,112 @@ class NAO(object):
         # Set NAO in Stiffness On
         stiffnessOn()
 
+    def retrieve_circle_pixels(self, x, y, r):
+        pixels = []
 
+        d = r * 2
+        for i in range(d):
+            for j in range(d):
+                x_p = x - r + i
+                y_p = y - r + j
+                dx = (x - x_p)**2
+                dy = (y - y_p)**2
+                if dx + dy <= r**2:
+                    pixels.append([x_p, y_p])
 
+        return pixels
+
+    def color_hist(self, img, nbins=32, bins_range=(0, 256)):
+        # Compute the histogram of the color channels separately
+        channel1_hist = np.histogram(img[:,:,0], bins=nbins, range=bins_range)
+        channel2_hist = np.histogram(img[:,:,1], bins=nbins, range=bins_range)
+        channel3_hist = np.histogram(img[:,:,2], bins=nbins, range=bins_range)
+        # Concatenate the histograms into a single feature vector
+        hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
+        # Return the individual histograms, bin_centers and feature vector
+        return hist_features
+
+    def detect(self, color_img, debug=False):
+        # convert the image to grayscale
+        img = cv2.cvtColor(color_img, cv2.COLOR_RGB2GRAY)
+
+        # reshape the image to make the circles circular and not ellipses
+        shape = img.shape
+        scale = 8
+        new_shape = (int(shape[0]/scale), int(shape[1]/scale*1.75))
+        img = cv2.resize(img, new_shape)
+        color_img = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
+        color_img = cv2.resize(color_img, new_shape)
+
+        # blur the image to eliminate false positives
+        img = cv2.GaussianBlur(img, (5,5), 0)
+
+        # find the circles in the image
+        circles = cv2.HoughCircles(img,cv2.HOUGH_GRADIENT, 20, .1, minRadius=1, maxRadius=25)
+
+        if circles is not None:
+            circles = np.round(circles[0, :]).astype("int")
+
+            if debug:
+                output = img.copy()
+                for (x, y, r) in circles:
+                    cv2.circle(output, (x, y), r, (0, 255, 0), 4)
+                    cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
+
+                # show the output image
+                cv2.imshow("output", np.hstack([img, output]))
+                cv2.waitKey(0)
+
+                output = np.zeros_like(color_img)
+
+                for (x, y, r) in circles:
+                    pixels = self.retrieve_circle_pixels(x, y, r)
+                    for p in pixels:
+                        x_p = p[0]
+                        y_p = p[1]
+                        if x_p < img.shape[1] and y_p < img.shape[0]:
+                            output[y_p, x_p] = color_img[y_p, x_p]
+
+                cv2.imshow("output", np.hstack([color_img, output]))
+                cv2.waitKey(0)
+
+            for (x,y,r) in circles:
+                ROI = np.zeros((2*r,2*r,3))
+                pixels = self.retrieve_circle_pixels(x, y, r)
+                for p in pixels:
+                    x_p = p[0]
+                    y_p = p[1]
+                    if x_p < color_img.shape[1] and y_p < color_img.shape[0]:
+                        x_r = x_p - x + r
+                        y_r = y_p - y + r
+                        print((x_p, x, x_r))
+                        #print((color_img[y_p, x_p,0], color_img[y_p, x_p,1], color_img[y_p, x_p,2]))
+                        ROI[y_r, x_r,0] = color_img[y_p, x_p,0]
+                        ROI[y_r, x_r,1] = color_img[y_p, x_p,1]
+                        ROI[y_r, x_r,2] = color_img[y_p, x_p,2]
+
+                #for i in range(len(ROI)):
+                #    for j in range(len(ROI[i])):
+                #        print ROI[i][j]
+                cv2.imshow("roi", ROI)
+                #cv2.waitKey(0)
+                print("----------------------------------------------\n")
+
+            cv2.imshow("color", color_img)
+            #cv2.waitKey(0)
 
 if __name__ == "__main__":
     nao_ip = "192.168.1.4"
     Nao = NAO(nao_ip)
+
+    filepath = "./img.jpg"
+    img = misc.imread(filepath)
+    Nao.detect(img)#, True)
+
+    #r = 5
+    #pixels = Nao.retrieve_circle_pixels(5,5,r)
+    #for p in pixels:
+    #    print p
+    #print len(pixels) / r**2
 
     #Nao.run()
