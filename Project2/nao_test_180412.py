@@ -6,24 +6,34 @@ import math
 import almath
 import motion
 import time
+import numpy as np
 
 ROBOT_IP = "192.168.1.6"
 PORT = 9559
+METER_INCH_RATIO = 0.0254
+DECIMAL_PLACES_PRECISION = 2
 CELL_DIMENSION = 21     # inches
 LANDMARK_SIZE = 0.06    # meters
+MAP_WIDTH = 89     # inches
+MAP_HEIGHT = 89     # inches
+currentCamera = "cameraTop"
 
-def stiffnessOn(proxy):
-    # "Body" name = the collection of all joints
-    pNames = "Body"
-    pStiffnessLists = 1.0
-    pTimeLists = 1.0
-    proxy.stiffnessInterpolation(pNames, pStiffnessLists, pTimeLists)
+
+# Intiializes the grid map with 0.5 values
+def setupGridMap():
+    map = np.arange(MAP_WIDTH * MAP_HEIGHT)
+    map = map.reshape((MAP_WIDTH, MAP_HEIGHT))
+    np.zeros_like(map)
+
+# Update map from noisy sensor measurements given the robot pose
+def updateGridMap(currentX, currentY, poseVector):
+
 
 def metersToInches(meters):
-    return meters / 0.0254
+    return round(meters / METER_INCH_RATIO, DECIMAL_PLACES_PRECISION)
 
 def inchesToMeters(inches):
-    return inches * 0.0254
+    return round(inches * METER_INCH_RATIO, DECIMAL_PLACES_PRECISION)
 
 def moveArm(motionProxy, pTarget, pRobotName, pChainName):
     ''' Function to make NAO bump on his Torso or Head with his arm '''
@@ -37,9 +47,9 @@ def moveArm(motionProxy, pTarget, pRobotName, pChainName):
     elif (pTarget == "Head"):
         ShoulderPitchAngle = -50
     else:
-        print("ERROR: target is unknown")
-        print("Must be Torso or Head")
-        print("---------------------")
+        print "ERROR: target is unknown"
+        print "Must be Torso or Head"
+        print "---------------------"
         exit(1)
 
     ShoulderRollAngle  = 6
@@ -53,9 +63,9 @@ def moveArm(motionProxy, pTarget, pRobotName, pChainName):
         pTargetAngles = [ShoulderPitchAngle, -ShoulderRollAngle,
             -ElbowYawAngle, -ElbowRollAngle]
     else:
-        print("ERROR: chainName is unknown")
-        print("Must be LArm or RArm")
-        print("---------------------")
+        print "ERROR: chainName is unknown"
+        print "Must be LArm or RArm"
+        print "---------------------"
         exit(1)
 
     # Set the target angles according to the robot version.
@@ -68,9 +78,9 @@ def moveArm(motionProxy, pTarget, pRobotName, pChainName):
     elif (pRobotName == "naoT2"):
         pTargetAngles = []
     else:
-        print("ERROR: Your robot is unknown")
-        print("This test is not available for your Robot")
-        print("---------------------")
+        print "ERROR: Your robot is unknown"
+        print "This test is not available for your Robot"
+        print "---------------------"
         exit(1)
 
     # Convert to radians.
@@ -80,16 +90,11 @@ def moveArm(motionProxy, pTarget, pRobotName, pChainName):
     motionProxy.angleInterpolationWithSpeed(
         pChainName, pTargetAngles, pMaxSpeedFraction)
 
-def moveHead(motionProxy, pTarget):
-    ''' Function to make NAO bump on his Torso or Head with his arm '''
-    print("Moving my head to " + str(pTarget))
-
-    # Example showing a single target for one joint
-    names             = "HeadYaw"
-    targetAngles      = pTarget * motion.TO_RAD
+def moveHead(motionProxy, pTarget, motionType):
+    print "Moving my head to " + str(pTarget)
     maxSpeedFraction  = 0.2 # Using 20% of maximum joint speed
-    motionProxy.angleInterpolationWithSpeed(names, targetAngles, maxSpeedFraction)
-    time.sleep(2.0)
+    motionProxy.angleInterpolationWithSpeed(motionType, pTarget * motion.TO_RAD, maxSpeedFraction)
+    #time.sleep(2.0)
 
 def detectLandmark(landmarkProxy):
     ''' Function to make NAO detect NAO marks '''
@@ -113,7 +118,7 @@ def detectLandmark(landmarkProxy):
     distanceFromCameraToLandmark = LANDMARK_SIZE / ( 2 * math.tan( angularSize / 2))
 
     # Get current camera position in NAO space.
-    transform = motionProxy.getTransform(cameraTop, 2, True)
+    transform = motionProxy.getTransform(currentCamera, 2, True)
     transformList = almath.vectorFloat(transform)
     robotToCamera = almath.Transform(transformList)
 
@@ -126,40 +131,54 @@ def detectLandmark(landmarkProxy):
     # Combine all transformations to get the landmark position in NAO space.
     robotToLandmark = robotToCamera * cameraToLandmarkRotationTransform * cameraToLandmarkTranslationTransform
 
-    print("x " + str(round(robotToLandmark.r1_c4/0.0254, 2)) + " (in inches)")
-    print("y " + str(round(robotToLandmark.r2_c4/0.0254, 2)) + " (in inches)")
-    print("z " + str(round(robotToLandmark.r3_c4/0.0254, 2)) + " (in inches)")
+    x = str(metersToInches(robotToLandmark.r1_c4))
+    y = str(metersToInches(robotToLandmark.r2_c4))
+    z = str(metersToInches(robotToLandmark.r3_c4))
+
+    print "x " + x + " (in inches)"
+    print "y " + y + " (in inches)"
+    print "z " + z + " (in inches)"
 
     speakProxy.say("I have detected a landmark.")
-
-    speakProxy.say("It is located at " + str(round(robotToLandmark.r1_c4/0.0254, 2)) + " inches away on my ex axis")
-    speakProxy.say("And at " + str(round(robotToLandmark.r2_c4/0.0254, 2)) + " inches away on my why axis")
-    speakProxy.say("And at " + str(round(robotToLandmark.r3_c4/0.0254, 2)) + " inches away on my zee axis")
+    speakProxy.say("It is located at " + x + " inches away on my ex axis")
+    speakProxy.say("And at " + y + " inches away on my why axis")
+    speakProxy.say("And at " + z + " inches away on my zee axis")
 
     # Subscribe to sonars, this will launch sonars (at hardware level) and start data acquisition.
     sonarProxy.subscribe("sonarTest")
 
     # Get sonar left first echo (distance in meters to the first obstacle).
-    print("left sonar data = " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Left/Sensor/Value"), 2)))
+    print "left sonar data = " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Left/Sensor/Value"), DECIMAL_PLACES_PRECISION))
 
     # Same thing for right.
-    print("right sonar data = " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Right/Sensor/Value"), 2)))
+    print "right sonar data = " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Right/Sensor/Value"), DECIMAL_PLACES_PRECISION))
 
-    speakProxy.say("My left sonar sensor detected at " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Left/Sensor/Value"), 2)))
-    speakProxy.say("And my right sonar sensor detected at " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Right/Sensor/Value"), 2)))
+    speakProxy.say("My left sonar sensor detected at " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Left/Sensor/Value"), DECIMAL_PLACES_PRECISION)))
+    speakProxy.say("And my right sonar sensor detected at " + str(round(memoryProxy.getData("Device/SubDeviceList/US/Right/Sensor/Value"), DECIMAL_PLACES_PRECISION)))
 
     sonarProxy.unsubscribe("sonarTest")
     landmarkProxy.unsubscribe("landmarkTest")
 
-def localizeCell():
+# position robot in center of home cell and localize in Home cell
+def localizeHome():
+
+    # Learning home.
+    map = localizationProxy.learnHome()
+    # Check that no problem occurred.
+    if map == 0:
+        print "Learning OK"
+    else:
+        print "Error during learning " + str(ret)
+
+def localizeInCell():
     # look straight ahead i.e. 0 degrees
-    moveHead(motionProxy, 0)
+    moveHead(motionProxy, 0, "HeadYaw")
 
     # run landmark detection
     detectLandmark(landmarkProxy)
 
     # look left i.e. 90 degrees
-    moveHead(motionProxy, 90)
+    moveHead(motionProxy, 90, "HeadYaw")
 
     # run landmark detection
     detectLandmark(landmarkProxy)
@@ -167,7 +186,7 @@ def localizeCell():
     # store localization_left
 
     # look right i.e. -90 degrees
-    moveHead(motionProxy, -90)
+    moveHead(motionProxy, -90, "HeadYaw")
 
     # run landmark detection
     detectLandmark(landmarkProxy)
@@ -175,55 +194,72 @@ def localizeCell():
     # store localization_right
 
     # look center i.e. 0 degrees
-    moveHead(motionProxy, 0)
+    moveHead(motionProxy, 0, "HeadYaw")
+    moveHead(motionProxy, 0, "HeadPitch")
 
+def saveLocation():
+    # Save the data for later use.
+    map = localizationProxy.save("example")
+    # Check that no problem occurred.
+    if map == 0:
+        print "saving OK"
+    else:
+        print "error during saving" + str(ret)
 
 def transitionCell(inches):
     ''' http://doc.aldebaran.com/2-5/naoqi/motion/control-walk-api.html#ALMotionProxy::moveTo__floatCR.floatCR.floatCR '''
+    ''' https://github.com/uts-magic-lab/pynaoqi_mate/blob/master/naoqi_proxy_python_classes/ALVisualCompass.py '''
 
     # Start a move
-    x = inchesToMeters(21)
+    x = inchesToMeters(inches)
     y = 0.0
     theta = 0.0
-    motionProxy.moveTo(x, y, theta, _async=False)
-
-    # Wait for it to finish
-    motionProxy.waitUntilMoveIsFinished()
+    #motionProxy.moveTo(x, y, theta, _async=False)
+    #motionProxy.waitUntilMoveIsFinished()
+    compassProxy.moveTo(x, y, theta)
 
 def rotateInCell(theta):
     ''' http://doc.aldebaran.com/2-5/naoqi/motion/control-walk-api.html#ALMotionProxy::moveTo__floatCR.floatCR.floatCR '''
+    ''' https://github.com/uts-magic-lab/pynaoqi_mate/blob/master/naoqi_proxy_python_classes/ALVisualCompass.py '''
 
     # Start a move
     x = 0.0
     y = 0.0
     theta = theta
-    motionProxy.moveTo(x, y, theta, _async=False)
+    #motionProxy.moveTo(x, y, theta, _async=False)
+    #motionProxy.waitUntilMoveIsFinished()
+    compassProxy.moveTo(x, y, theta)
 
-    # Wait for it to finish
-    motionProxy.waitUntilMoveIsFinished()
+def returnHome():
+    # Go back home.
+    map = localizationProxy.goToHome()
+    # Check that no problem occurred.
+    if map == 0:
+        print "go to home OK"
+    else:
+        print "error during go to home " + str(ret)
 
 def rest():
     # Go to rest position
     motionProxy.rest()
 
 # Init proxies.
-awarenessProxy  = ALProxy("ALBasicAwareness", ROBOT_IP, PORT)
-motionProxy     = ALProxy("ALMotion", ROBOT_IP, PORT)
-postureProxy    = ALProxy("ALRobotPosture", ROBOT_IP, PORT)
-faceProxy       = ALProxy("ALFaceDetection", ROBOT_IP, PORT)
-speakProxy      = ALProxy("ALTextToSpeech", ROBOT_IP, PORT)
-memoryProxy     = ALProxy("ALMemory", ROBOT_IP, PORT)
-landmarkProxy   = ALProxy("ALLandMarkDetection", ROBOT_IP, PORT)
-sonarProxy      = ALProxy("ALSonar", ROBOT_IP, PORT)
+awarenessProxy      = ALProxy("ALBasicAwareness", ROBOT_IP, PORT)
+motionProxy         = ALProxy("ALMotion", ROBOT_IP, PORT)
+postureProxy        = ALProxy("ALRobotPosture", ROBOT_IP, PORT)
+faceProxy           = ALProxy("ALFaceDetection", ROBOT_IP, PORT)
+speakProxy          = ALProxy("ALTextToSpeech", ROBOT_IP, PORT)
+memoryProxy         = ALProxy("ALMemory", ROBOT_IP, PORT)
+landmarkProxy       = ALProxy("ALLandMarkDetection", ROBOT_IP, PORT)
+sonarProxy          = ALProxy("ALSonar", ROBOT_IP, PORT)
+localizationProxy   = ALProxy("ALLocalization", ROBOT_IP, PORT)
+compassProxy        = ALProxy("ALVisualCompass", ROBOT_IP, PORT)
 
 # Wake up robot
 motionProxy.wakeUp()
 
 awarenessProxy.setStimulusDetectionEnabled("People", False)
 awarenessProxy.setStimulusDetectionEnabled("Sound", False)
-
-# Set NAO in Stiffness On
-#stiffnessOn(motionProxy)
 
 # Send NAO to Pose Init
 postureProxy.goToPosture("StandInit", 0.5)
@@ -234,11 +270,8 @@ faceProxy.enableTracking(False)
 # Prepare to speak
 speakProxy.say("Ready to go again!")
 
-# Set the current camera ("CameraTop" or "CameraBottom").
-cameraTop = "CameraTop"
-cameraBottom = "CameraBottom"
-
-localizeCell()
+setupGridMap()
+localizeInCell()
 transitionCell(21)
 rotateInCell(math.pi / 2)
 rest()
