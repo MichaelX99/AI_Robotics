@@ -280,7 +280,7 @@ cameraBottom = "CameraBottom"
 # Subscribe to LandmarkDetected event from ALLandMarkDetection proxy.
 landmarkProxy.subscribe("landmarkTest")
 
-speakProxy.say("Yo Dr. Silaghi, Watch This.")
+speakProxy.say("Yo Dr. Silaghi, I'm about localize in next cell.")
 
 x, y, z = localizeCell()
 distance = (x-CELL_DIMENSION/2)*0.5
@@ -297,7 +297,7 @@ rest()
 
 landmarkProxy.unsubscribe("landmarkTest")
 
-speakProxy.say("I am done now. This shit was hard. Bitches")
+speakProxy.say("I am done now. I am localized in the new cell.")
 
 # Send NAO to Pose Init
 postureProxy.goToPosture("Crouch", 0.5)
